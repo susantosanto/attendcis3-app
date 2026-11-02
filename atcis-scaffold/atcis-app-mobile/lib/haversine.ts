@@ -16,9 +16,26 @@ export function todayJakarta(): string {
 }
 
 const BULAN = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const BULAN_PENDEK = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 
 export function formatIndoDate(yyyyMMDD: string): string {
+  const p = indoParts(yyyyMMDD);
+  return p ? `${p.dowName}, ${p.dayNum} ${p.monFull} ${p.year}` : yyyyMMDD;
+}
+
+export function indoParts(yyyyMMDD: string): {
+  dowName: string; dayNum: string; dayPadded: string;
+  monShort: string; monFull: string; year: string;
+} | null {
   const [y, m, d] = yyyyMMDD.split('-').map(Number);
-  if (!y || !m || !d) return yyyyMMDD;
-  return `${d} ${BULAN[m - 1]} ${y}`;
+  if (!y || !m || !d) return null;
+  return {
+    dowName: HARI[new Date(y, m - 1, d).getDay()],
+    dayNum: String(d),
+    dayPadded: String(d).padStart(2, '0'),
+    monShort: BULAN_PENDEK[m - 1],
+    monFull: BULAN[m - 1],
+    year: String(y),
+  };
 }

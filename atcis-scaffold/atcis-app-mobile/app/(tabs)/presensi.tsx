@@ -1,23 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { submitAttendance } from '../../lib/attendance';
 import { SelfieCapture } from '../../components/SelfieCapture';
-import { GeoInfo, useGeofence } from '../../components/GeofenceGate';
+import { MapCard } from '../../components/MapCard';
+import { TabFade } from '../../components/TabFade';
+import { useGeofence } from '../../components/GeofenceGate';
 import { SuccessMoodDialog } from '../../components/SuccessMoodDialog';
-import { Card, Pill, Row, ScreenHeader, SectionTitle } from '../../components/ui';
-import { IconChip } from '../../components/icons';
-import { formatIndoDate, todayJakarta } from '../../lib/haversine';
-
-function useClock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  return now;
-}
+import { Pill, Row, SectionTitle } from '../../components/ui';
+import { AppIcon } from '../../components/icons';
+import { formatIndoDate, indoParts, todayJakarta } from '../../lib/haversine';
 
 export default function PresensiScreen() {
   const [cfg, setCfg] = useState({ latitude: 0, longitude: 0, radius_meter: 100 });
@@ -27,11 +21,10 @@ export default function PresensiScreen() {
   const [nama, setNama] = useState('Guru');
   const [role, setRole] = useState('guru');
   const [userId, setUserId] = useState<string | null>(null);
-  const [stats, setStats] = useState({ hadir: 0, sakit: 0, izin: 0 });
   const [bulan, setBulan] = useState({ hadir: 0, izin: 0, alpha: 0 });
   const [history, setHistory] = useState<{ tanggal: string; waktu: string; status: string; tipe: string }[]>([]);
   const [banner, setBanner] = useState<{ judul: string; isi: string } | null>(null);
-  const [selfieOk, setSelfieOk] = useState(false);
+  const [camOpen, setCamOpen] = useState(false);
   const [alasan, setAlasan] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +34,11 @@ export default function PresensiScreen() {
   const [attId, setAttId] = useState<string | null>(null);
   const [gpsKey, setGpsKey] = useState(0);
   const geo = useGeofence(cfg.latitude, cfg.longitude, gpsKey);
-  const now = useClock();
   const tgl = todayJakarta();
+  const parts = indoParts(tgl);
+  const recIn = history.find((h) => h.tanggal === tgl && h.tipe === 'in');
+  const recOut = history.find((h) => h.tanggal === tgl && h.tipe === 'out');
+  const fmtWaktu = (w: string | null) => w ? new Date(w).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(':', ' : ') : '– : –';
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -64,10 +60,6 @@ export default function PresensiScreen() {
     const { data: prof } = await supabase.from('profiles').select('nama, role').eq('id', user.id).single();
     if (prof) { setNama(prof.nama); setRole(prof.role); }
     const awalBulan = tgl.slice(0, 7) + '-01';
-    const { count: hadir } = await supabase.from('attendance').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('tipe', 'in');
-    const { count: sakit } = await supabase.from('leave_requests').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('jenis', 'sakit').eq('status', 'approved');
-    const { count: izin } = await supabase.from('leave_requests').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('jenis', 'izin').eq('status', 'approved');
-    setStats({ hadir: hadir ?? 0, sakit: sakit ?? 0, izin: izin ?? 0 });
     const { count: bHadir } = await supabase.from('attendance').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('tipe', 'in').gte('tanggal', awalBulan);
     const { count: bIzin } = await supabase.from('leave_requests').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'approved').gte('tgl_mulai', awalBulan);
     setBulan({ hadir: bHadir ?? 0, izin: bIzin ?? 0, alpha: 0 });
@@ -78,18 +70,19 @@ export default function PresensiScreen() {
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 
-  // GAP-05: status pill kontekstual
-  const jamNow = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-  const hm = jamNow.slice(0, 5);
-  let pill: { text: string; tone: 'ok' | 'warn' | 'bad' | 'info' } = { text: 'Memuat jadwal…', tone: 'info' };
-  if (isLibur || !sched) pill = { text: 'Libur — presensi nonaktif', tone: 'bad' };
-  else if (hm < sched.jam_masuk.slice(0, 5)) pill = { text: 'Menunggu Jam Masuk', tone: 'info' };
-  else if (hm < sched.jam_pulang.slice(0, 5)) pill = { text: 'Jam Kerja Aktif', tone: 'ok' };
-  else pill = { text: 'Waktu Pulang Tiba', tone: 'warn' };
-
   async function handleSubmit(tipe: 'in' | 'out') {
     setError(null);
-    if (!selfieOk) { setError('Ambil selfie dulu'); return; }
+    if (tipe === 'in' && !camOpen) {
+      // Check-in SELALU lewat kamera otomatis — tanpa tombol selfie manual.
+      if (geo.mock) { setError('Lokasi tiruan terdeteksi'); return; }
+      setCamOpen(true);
+      return;
+    }
+    await doSubmit(tipe);
+  }
+
+  async function doSubmit(tipe: 'in' | 'out') {
+    setError(null);
     if (geo.mock) { setError('Lokasi tiruan terdeteksi'); return; }
     if (!userId) { setError('Masuk dulu untuk presensi (atau Mode pratinjau untuk lihat tampilan)'); return; }
     setLoading(true);
@@ -112,81 +105,155 @@ export default function PresensiScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader
-        title={`Halo, ${nama} 👋`}
-        subtitle={`${role === 'kepsek' ? 'Kepala Sekolah' : role === 'operator' ? 'Operator' : 'Guru'} • SDN Cisomang 3 • ${jamNow}`}
-        right={<Pill text="● Online" tone="ok" />}
-      />
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: '#F5F3EF' }} contentContainerStyle={{ paddingBottom: 120 }}>
+      {/* Kepala halaman ringan */}
+      <LinearGradient
+        colors={[theme.colors.header, theme.colors.amberDark]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+        style={{ paddingHorizontal: 20, paddingTop: 18, paddingBottom: 26, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', alignItems: 'center' }}
+      >
+        <View style={{ position: 'absolute', top: -70, right: -50, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,255,255,0.08)' }} />
+        <View style={{ position: 'absolute', bottom: -90, left: 30, width: 150, height: 150, borderRadius: 75, backgroundColor: 'rgba(255,255,255,0.05)' }} />
+        <View style={{
+          width: 84, height: 84, borderRadius: 42, marginTop: 10, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'rgba(255,255,255,0.25)', borderWidth: 3, borderColor: 'rgba(255,255,255,0.9)',
+          shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 14,
+          shadowOffset: { width: 0, height: 6 }, elevation: 6,
+        }}>
+          <View style={{ width: 70, height: 70, borderRadius: 35, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 28, fontFamily: theme.font.extraBold, color: theme.colors.amberDark }}>{nama.charAt(0).toUpperCase()}</Text>
+          </View>
+        </View>
+        <Text style={{ fontSize: 22, fontFamily: theme.font.extraBold, color: '#fff', letterSpacing: -0.4, marginTop: 10 }}>{nama}</Text>
+        <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 2 }}>{role === 'kepsek' ? 'Kepala Sekolah' : role === 'operator' ? 'Operator' : 'Guru'} • SDN Cisomang 3</Text>
+      </LinearGradient>
 
-      <Card overlap>
+      <View style={{ marginHorizontal: 16, marginTop: 14, backgroundColor: '#fff', borderRadius: 22, padding: 18, borderWidth: 1, borderColor: '#ECE9E2' }}>
         {banner ? (
-          <View style={{ backgroundColor: '#FFF8E6', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#F5DFA0' }}>
-            <Text style={{ fontWeight: '800', fontSize: 13 }}>PENGUMUMAN — {banner.judul}</Text>
-            <Text style={{ color: theme.colors.muted, marginTop: 2 }}>{banner.isi}</Text>
+          <View style={{ backgroundColor: '#FFF8E6', borderRadius: 12, padding: 10, marginBottom: 12 }}>
+            <Text style={{ fontWeight: '700', fontSize: 13 }}>PENGUMUMAN — {banner.judul}</Text>
+            <Text style={{ color: theme.colors.muted, marginTop: 2, fontSize: 12 }}>{banner.isi}</Text>
           </View>
         ) : null}
-        <View style={{ flexDirection: 'row' }}>
-          {[['Presence', `${stats.hadir}`, 'Days'], ['Sick', `${stats.sakit}`, 'Times'], ['Permission', `${stats.izin}`, 'Times']].map(([k, v, u]) => (
-            <View key={k} style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ color: theme.colors.muted, fontSize: 12 }}>{k}</Text>
-              <Text style={{ fontSize: 20, fontWeight: '800' }}>{v}<Text style={{ fontSize: 11, fontWeight: '400' }}> {u}</Text></Text>
-            </View>
-          ))}
-        </View>
-        <Text style={{ color: theme.colors.muted, fontSize: 12, marginTop: 8, textAlign: 'center' }}>
-          Bulan ini: {bulan.hadir} hadir • {bulan.izin} izin/sakit disetujui
-        </Text>
-      </Card>
-
-      <Card>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <SectionTitle>{formatIndoDate(tgl)}</SectionTitle>
-          <Pill text={pill.text} tone={pill.tone} />
+          <Text style={{ fontSize: 13, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>
+            <Text style={{ color: '#7C6CF0' }}>▍</Text> Bulan ini
+          </Text>
+          <Text style={{ fontSize: 12, color: '#8A8578' }}>{parts ? `${parts.monFull} ${parts.year}` : ''}</Text>
         </View>
-        {liburBesok ? <Text style={{ color: theme.colors.checkOut, marginBottom: 6 }}>Besok libur: {liburBesok}</Text> : null}
-        <SelfieCapture onCaptured={() => setSelfieOk(true)} />
-        <GeoInfo jarak={geo.ready ? geo.jarak : -1} radius={cfg.radius_meter} />
-        <Text onPress={() => setGpsKey((k) => k + 1)} style={{ color: theme.colors.primary, marginBottom: 6 }}>📡 Refresh GPS</Text>
-        {geo.error ? <Text style={{ color: theme.colors.danger }}>{geo.error}</Text> : null}
-        <View style={{ flexDirection: 'row', gap: 12, marginTop: 6 }}>
+        <View style={{ flexDirection: 'row' }}>
+          <View style={{ flex: 1, alignItems: 'flex-start' }}>
+            <Text style={{ fontSize: 32, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>{bulan.hadir}</Text>
+            <Text style={{ fontSize: 13, color: '#6B6659' }}>Hadir</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: '#ECE9E2', marginVertical: 4 }} />
+          <View style={{ flex: 1, alignItems: 'flex-start', paddingLeft: 18 }}>
+            <Text style={{ fontSize: 32, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>{bulan.izin}</Text>
+            <Text style={{ fontSize: 13, color: '#6B6659' }}>Izin / sakit <Text style={{ fontSize: 11 }}>disetujui</Text></Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 20, marginTop: 22, marginBottom: 10 }}>
+        <Text style={{ fontSize: 18, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>Presensi hari ini</Text>
+      </View>
+
+      <View style={{ marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 22, padding: 16, borderWidth: 1, borderColor: '#ECE9E2' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 52, height: 60, borderRadius: 14, borderWidth: 1, borderColor: '#ECE9E2', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FAF9F6' }}>
+            <Text style={{ fontSize: 10, fontFamily: theme.font.extraBold, letterSpacing: 1.5, color: '#8A8578' }}>{parts ? parts.monShort.toUpperCase() : ''}</Text>
+            <Text style={{ fontSize: 22, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>{parts ? parts.dayPadded : ''}</Text>
+          </View>
+          <View>
+            <Text style={{ fontSize: 17, fontFamily: theme.font.extraBold, color: '#1F1B16' }}>{parts ? parts.dowName : ''}</Text>
+            <Text style={{ fontSize: 13, color: '#8A8578' }}>{parts ? `${parts.dayNum} ${parts.monFull} ${parts.year}` : ''}</Text>
+          </View>
+        </View>
+        {geo.error ? <Text style={{ color: theme.colors.danger, marginVertical: 6 }}>{geo.error}</Text> : null}
+        {(!sched || isLibur) ? (
+          <View style={{ backgroundColor: '#F1EFE9', borderRadius: 14, padding: 12, marginTop: 12, flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <AppIcon name="info" size={20} color="#8A8578" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontFamily: theme.font.bold, color: '#5B564A' }}>Libur — presensi nonaktif</Text>
+              <Text style={{ fontSize: 12, color: '#8A8578' }}>Tidak ada presensi yang perlu diisi.</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={{ backgroundColor: '#EEF4FF', borderRadius: 14, padding: 12, marginTop: 12, flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <AppIcon name="info" size={20} color={theme.colors.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontFamily: theme.font.bold, color: '#1E40AF' }}>
+                {!userId ? 'Masuk untuk mengaktifkan presensi GPS' : `Radius ${cfg.radius_meter} m • ${geo.ready ? (geo.jarak <= cfg.radius_meter ? `Dalam radius (${geo.jarak} m)` : `Di luar radius (${geo.jarak} m)`) : 'Menghitung jarak…'}`}
+              </Text>
+              {liburBesok ? <Text style={{ fontSize: 12, color: theme.colors.checkOut, marginTop: 2 }}>Besok libur: {liburBesok}</Text> : null}
+            </View>
+          </View>
+        )}
+        <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
           <Pressable
             onPress={() => handleSubmit('in')}
             style={({ pressed }) => ({
-              flex: 1, borderRadius: 20, padding: 16, backgroundColor: '#fff',
-              borderWidth: 1.5, borderColor: pressed ? '#10B981' : '#ECEFF3',
-              opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }],
-              shadowColor: '#10B981', shadowOpacity: pressed ? 0.25 : 0.1, shadowRadius: 12,
-              shadowOffset: { width: 0, height: 5 }, elevation: 3,
+              flex: 1, borderRadius: 22, overflow: 'hidden',
+              opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.96 : 1 }, { translateY: pressed ? 2 : 0 }],
+              shadowColor: '#065F46', shadowOpacity: 0.35, shadowRadius: 18,
+              shadowOffset: { width: 0, height: 10 }, elevation: 8,
             })}
           >
-            <IconChip name="checkin" bg="#DFF7E6" fg="#10B981" size={44} />
-            <Text style={{ fontSize: 21, fontWeight: '800', color: '#0F172A', marginTop: 10 }}>{sched ? sched.jam_masuk.slice(0, 5) : '--:--'}</Text>
-            <Text style={{ fontSize: 12, fontWeight: '800', color: '#10B981', letterSpacing: 1, marginTop: 2 }}>CHECK IN</Text>
+            <LinearGradient
+              colors={['#34D399', '#10B981', '#059669']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={{ padding: 16, borderRadius: 22, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)', borderBottomColor: '#065F46' }}
+            >
+              <View style={{ position: 'absolute', top: 0, left: 12, right: 12, height: 18, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.22)' }} />
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}>
+                <AppIcon name="checkin" size={22} color="#059669" />
+              </View>
+              <Text style={{ fontSize: 23, fontFamily: theme.font.extraBold, color: '#fff', marginTop: 12, textShadowColor: 'rgba(0,0,0,0.18)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{recIn ? fmtWaktu(recIn.waktu) : '– : –'}</Text>
+              <Text style={{ fontSize: 12, fontFamily: theme.font.extraBold, color: 'rgba(255,255,255,0.95)', letterSpacing: 1.6, marginTop: 2 }}>CHECK IN</Text>
+              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{recIn ? `Tercatat ${fmtWaktu(recIn.waktu)}` : 'Belum tercatat'}</Text>
+            </LinearGradient>
           </Pressable>
           <Pressable
             onPress={() => handleSubmit('out')}
             style={({ pressed }) => ({
-              flex: 1, borderRadius: 20, padding: 16, backgroundColor: '#fff',
-              borderWidth: 1.5, borderColor: pressed ? '#F97316' : '#ECEFF3',
-              opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }],
-              shadowColor: '#F97316', shadowOpacity: pressed ? 0.25 : 0.1, shadowRadius: 12,
-              shadowOffset: { width: 0, height: 5 }, elevation: 3,
+              flex: 1, borderRadius: 22, overflow: 'hidden',
+              opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.96 : 1 }, { translateY: pressed ? 2 : 0 }],
+              shadowColor: '#7C2D12', shadowOpacity: 0.35, shadowRadius: 18,
+              shadowOffset: { width: 0, height: 10 }, elevation: 8,
             })}
           >
-            <IconChip name="checkout" bg="#FFEEDD" fg="#F97316" size={44} />
-            <Text style={{ fontSize: 21, fontWeight: '800', color: '#0F172A', marginTop: 10 }}>{sched ? sched.jam_pulang.slice(0, 5) : '--:--'}</Text>
-            <Text style={{ fontSize: 12, fontWeight: '800', color: '#F97316', letterSpacing: 1, marginTop: 2 }}>CHECK OUT</Text>
+            <LinearGradient
+              colors={['#FB923C', '#F97316', '#EA580C']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={{ padding: 16, borderRadius: 22, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.45)', borderBottomColor: '#7C2D12' }}
+            >
+              <View style={{ position: 'absolute', top: 0, left: 12, right: 12, height: 18, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.22)' }} />
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'rgba(255,255,255,0.95)', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.9)', shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 }}>
+                <AppIcon name="checkout" size={22} color="#EA580C" />
+              </View>
+              <Text style={{ fontSize: 23, fontFamily: theme.font.extraBold, color: '#fff', marginTop: 12, textShadowColor: 'rgba(0,0,0,0.18)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 }}>{recOut ? fmtWaktu(recOut.waktu) : '– : –'}</Text>
+              <Text style={{ fontSize: 12, fontFamily: theme.font.extraBold, color: 'rgba(255,255,255,0.95)', letterSpacing: 1.6, marginTop: 2 }}>CHECK OUT</Text>
+              <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 2 }}>{recOut ? `Tercatat ${fmtWaktu(recOut.waktu)}` : 'Belum tercatat'}</Text>
+            </LinearGradient>
           </Pressable>
         </View>
+        <Text style={{ fontSize: 11, fontFamily: theme.font.extraBold, letterSpacing: 1.5, color: theme.colors.muted, marginTop: 14 }}>
+          ALASAN KETERLAMBATAN
+        </Text>
         <TextInput
-          placeholder="Alasan (wajib jika terlambat)"
+          placeholder=""
+          autoCapitalize="none" autoCorrect={false}
           value={alasan} onChangeText={setAlasan}
-          style={{ backgroundColor: theme.colors.background, padding: 12, borderRadius: 10, marginTop: 8 }}
+          style={{ fontSize: 16, fontFamily: theme.font.regular, color: theme.colors.text, borderBottomWidth: 1.5, borderBottomColor: '#E2E8F0', paddingVertical: 10, outlineStyle: 'none' } as never}
         />
         {error ? <Text style={{ color: theme.colors.danger, marginTop: 8 }}>{error}</Text> : null}
         {loading ? <ActivityIndicator style={{ marginTop: 8 }} /> : null}
-      </Card>
+      </View>
+
+      <View style={{ marginHorizontal: 16 }}>
+        <MapCard jarak={geo.ready ? geo.jarak : -1} radius={cfg.radius_meter} ready={geo.ready} onRefresh={() => setGpsKey((k) => k + 1)} />
+      </View>
 
       <View style={{ margin: theme.spacing.md }}>
         <SectionTitle>Last History</SectionTitle>
@@ -210,7 +277,13 @@ export default function PresensiScreen() {
         // BUGFIX: mood dipilih SETELAH insert — simpan via update.
         if (attId) (async () => { try { await supabase.from('attendance').update({ mood: m }).eq('id', attId); } catch { /* abaikan */ } })();
       }} />
+      <SelfieCapture
+        visible={camOpen}
+        onClose={() => setCamOpen(false)}
+        onCaptured={() => { setCamOpen(false); doSubmit('in').catch(() => {}); }}
+      />
     </ScrollView>
+    </TabFade>
   );
 }
 

@@ -1,6 +1,8 @@
 import { ScrollView, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { theme } from '../_layout';
 import { Card, ScreenHeader, SectionTitle } from '../../components/ui';
+import { TabFade } from '../../components/TabFade';
 
 /** Tanya Jawab / Panduan (SIKADIR hub menu). Konten statis, tanpa backend. */
 const QA = [
@@ -14,8 +16,9 @@ const QA = [
 
 export default function QaScreen() {
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Bantuan & Q&A" subtitle="Panduan penggunaan AttendCis 3" />
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScreenHeader title="Bantuan & Q&A" subtitle="Panduan penggunaan AttendCis 3" onBack={() => router.back()} />
       <Card overlap>
         <SectionTitle>Sering Ditanyakan</SectionTitle>
         {QA.map((x) => (
@@ -27,5 +30,6 @@ export default function QaScreen() {
       </Card>
       <View style={{ height: 24 }} />
     </ScrollView>
+    </TabFade>
   );
 }

@@ -1,87 +1,82 @@
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { Tabs } from 'expo-router';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
 import { theme } from '../_layout';
 import { AppIcon, type IconName } from '../../components/icons';
 
-function TabIcon({ name, color, focused }: { name: IconName; color: string; focused: boolean }) {
+const TABS: { name: string; label: string; icon: IconName }[] = [
+  { name: 'presensi', label: 'Home', icon: 'home' },
+  { name: 'izin', label: 'Izin', icon: 'leave' },
+  { name: 'kalender', label: 'Kalender', icon: 'calendar' },
+  { name: 'menu', label: 'Menu', icon: 'menu' },
+];
+
+/** Bottom menu animasi ala Dribbble: tab fokus mengembang jadi pil (ikon+label),
+ *  tab lain ikon saja. Indikator pegas + fade label. */
+function AnimatedBar({ state, navigation }: BottomTabBarProps) {
+  const anims = useRef(TABS.map(() => new Animated.Value(0))).current;
+
+  useEffect(() => {
+    TABS.forEach((t, i) => {
+      const focused = state.routes[state.index]?.name === t.name;
+      Animated.timing(anims[i], { toValue: focused ? 1 : 0, duration: 260, useNativeDriver: false }).start();
+    });
+  }, [state.index, state.routes, anims]);
+
   return (
-    <View style={{
-      width: 46, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: focused ? 'rgba(37,99,235,0.16)' : 'transparent',
-    }}>
-      <AppIcon name={name} color={color} strokeWidth={focused ? 2.2 : 1.8} />
+    <View style={{ position: 'absolute', left: 20, right: 20, bottom: 22 }}>
+      <View style={{ borderRadius: 36, overflow: 'hidden' }}>
+        <BlurView intensity={62} tint="light" style={StyleSheet.absoluteFillObject} />
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.42)' }} />
+        <View style={{ position: 'absolute', top: 0, left: 26, right: 26, height: 1, backgroundColor: 'rgba(255,255,255,0.9)' }} />
+        <View style={{ flexDirection: 'row', paddingVertical: 10, paddingHorizontal: 10 }}>
+          {TABS.map((meta, i) => {
+            const route = state.routes.find((r) => r.name === meta.name);
+            if (!route) return null;
+            const focused = state.routes[state.index]?.name === meta.name;
+            const onPress = () => {
+              const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+              if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+            };
+            return (
+              <Pressable key={route.key} onPress={onPress} style={{ flex: 1, alignItems: 'center' }}>
+                <Animated.View style={{
+                  flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  height: 40, borderRadius: 20, overflow: 'hidden',
+                  paddingHorizontal: anims[i].interpolate({ inputRange: [0, 1], outputRange: [10, 16] }),
+                  backgroundColor: anims[i].interpolate({ inputRange: [0, 1], outputRange: ['rgba(245,158,11,0)', 'rgba(245,158,11,0.18)'] }),
+                }}>
+                  <AppIcon name={meta.icon} size={23} color={focused ? theme.colors.amberDark : '#C2B59B'} />
+                  <Animated.Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: 12, fontFamily: theme.font.extraBold, color: theme.colors.amberDark,
+                      opacity: anims[i], maxWidth: anims[i].interpolate({ inputRange: [0, 1], outputRange: [0, 120] }),
+                    }}>
+                    {meta.label}
+                  </Animated.Text>
+                </Animated.View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
     </View>
   );
 }
 
-/**
- * Tab bar Liquid Glass iOS 26 (Apple HIG):
- * - kapsul mengambang (radius = 1/2 tinggi), thin material
- * - specular highlight 1pt di tepi atas (putih 12%)
- * - tab aktif: ikon lebih tebal + lingkaran aksen 16%
- * - kaca HANYA di lapis navigasi — konten tetap opak (aturan Apple)
- */
 export default function TabsLayout() {
   return (
     <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: '#9AA3B2',
-        tabBarStyle: {
-          position: 'absolute',
-          marginHorizontal: 20,
-          marginBottom: 22,
-          borderRadius: 36,
-          height: 72,
-          paddingTop: 10,
-          paddingBottom: 12,
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          elevation: 0,
-        },
-        tabBarBackground: () => (
-          <View style={{ ...StyleSheet.absoluteFillObject, borderRadius: 36, overflow: 'hidden' }}>
-            <BlurView intensity={62} tint="light" style={StyleSheet.absoluteFillObject} />
-            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.42)' }} />
-            {/* specular highlight tepi atas */}
-            <View style={{ position: 'absolute', top: 0, left: 24, right: 24, height: 1, backgroundColor: 'rgba(255,255,255,0.9)' }} />
-            <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 0, borderRadius: 36, borderWidth: 0.5, borderColor: 'rgba(15,23,42,0.08)' }} />
-          </View>
-        ),
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '800', marginTop: 1 },
-      }}
+      tabBar={(props) => <AnimatedBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
-      <Tabs.Screen
-        name="presensi"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="home" color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="izin"
-        options={{
-          title: 'Izin',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="leave" color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="kalender"
-        options={{
-          title: 'Kalender',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="calendar" color={color} focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="menu"
-        options={{
-          title: 'Menu',
-          tabBarIcon: ({ focused, color }) => <TabIcon name="menu" color={color} focused={focused} />,
-        }}
-      />
-      {/* Layar dalam — diakses dari grid Menu, bukan tab bar */}
+      <Tabs.Screen name="presensi" options={{ title: 'Home' }} />
+      <Tabs.Screen name="izin" options={{ title: 'Izin' }} />
+      <Tabs.Screen name="kalender" options={{ title: 'Kalender' }} />
+      <Tabs.Screen name="menu" options={{ title: 'Menu' }} />
       <Tabs.Screen name="approval" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
       <Tabs.Screen name="akun" options={{ href: null }} />

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { Btn, Card, Pill, Row, ScreenHeader, SectionTitle, normalNama } from '../../components/ui';
+import { TabFade } from '../../components/TabFade';
 import { IconChip } from '../../components/icons';
 import { todayJakarta, formatIndoDate } from '../../lib/haversine';
 
@@ -69,8 +71,9 @@ export default function DashboardScreen() {
   const dotColor = (s: RowData['status']) => s === 'Alpha' ? '#EF4444' : s === 'Hadir' ? '#10B981' : s === 'Terlambat' ? '#F59E0B' : '#F97316';
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Dashboard Monitoring" subtitle={`${formatIndoDate(tgl)} • ${counts.total} guru/staf`} />
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScreenHeader title="Dashboard Monitoring" subtitle={`${formatIndoDate(tgl)} • ${counts.total} guru/staf`} onBack={() => router.back()} />
       <Card overlap>
         <View style={{ flexDirection: 'row' }}>
           {[
@@ -124,5 +127,6 @@ export default function DashboardScreen() {
         </View>
       </Modal>
     </ScrollView>
+    </TabFade>
   );
 }

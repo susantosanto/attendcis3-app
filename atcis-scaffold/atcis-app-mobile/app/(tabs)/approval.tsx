@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { Btn, Card, Pill, ScreenHeader, SectionTitle } from '../../components/ui';
+import { TabFade } from '../../components/TabFade';
 
 interface Item { id: string; user_id: string; jenis: string; tgl_mulai: string; tgl_selesai: string; keterangan: string; status: string; nama?: string }
 
@@ -47,10 +49,12 @@ export default function ApprovalScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
       <ScreenHeader
         title="Approval"
         subtitle="Persetujuan berjenjang"
+        onBack={() => router.back()}
         right={<Pill text={`${items.length} pending`} tone={items.length ? 'warn' : 'ok'} />}
       />
       <Card overlap>
@@ -81,5 +85,6 @@ export default function ApprovalScreen() {
         {items.length === 0 && !loading ? <Text style={{ color: theme.colors.muted }}>Tidak ada pengajuan pending.</Text> : null}
       </View>
     </ScrollView>
+    </TabFade>
   );
 }

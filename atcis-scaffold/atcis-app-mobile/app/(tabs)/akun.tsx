@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { Btn, Card, ScreenHeader } from '../../components/ui';
-
+import { TabFade } from '../../components/TabFade';
 /** GAP-03: Pengaturan akun — ganti password mandiri (verifikasi via login ulang tidak perlu; session aktif = pemilik). */
 export default function AkunScreen() {
   const [nama, setNama] = useState('-');
@@ -13,6 +14,20 @@ export default function AkunScreen() {
   const [pw2, setPw2] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [armed, setArmed] = useState(false);
+
+  async function keluar() {
+    if (!armed) {
+      setArmed(true);
+      setTimeout(() => setArmed(false), 4000);
+      return;
+    }
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      router.replace('/login');
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -41,8 +56,9 @@ export default function AkunScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <ScreenHeader title="Akun Saya" subtitle="Profil & pengaturan" />
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScreenHeader title="Akun Saya" subtitle="Profil & pengaturan" onBack={() => router.back()} />
       <Card overlap>
         <Text style={{ fontSize: 17, fontWeight: '800' }}>{nama}</Text>
         <Text style={{ color: theme.colors.muted }}>NIP {nip} • {role === 'kepsek' ? 'Kepala Sekolah' : role === 'operator' ? 'Operator' : 'Guru'}</Text>
@@ -56,9 +72,10 @@ export default function AkunScreen() {
         {msg ? <Text style={{ marginBottom: 8 }}>{msg}</Text> : null}
         {loading ? <ActivityIndicator /> : <Btn title="Simpan Password" onPress={ganti} />}
         <View style={{ marginTop: 12 }}>
-          <Btn title="Keluar" onPress={async () => { await supabase.auth.signOut(); }} tone="danger" />
+          <Btn title={armed ? 'Ketuk Lagi untuk Keluar' : 'Keluar'} onPress={keluar} tone={armed ? 'dark' : 'danger'} />
         </View>
       </Card>
     </ScrollView>
+    </TabFade>
   );
 }

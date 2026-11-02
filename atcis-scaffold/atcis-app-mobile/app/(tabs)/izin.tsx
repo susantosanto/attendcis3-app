@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, Text, TextInput, View } from 'react-nati
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { useLeaveNotifications } from '../../lib/push';
+import { TabFade } from '../../components/TabFade';
 import { Btn, Card, Pill, Row, ScreenHeader, SectionTitle, Segmented } from '../../components/ui';
 
 const JENIS = ['izin', 'sakit', 'dinas'] as const;
@@ -10,8 +11,8 @@ const JENIS = ['izin', 'sakit', 'dinas'] as const;
 export default function IzinScreen() {
   const [userId, setUserId] = useState<string | null>(null);
   const [jenis, setJenis] = useState<(typeof JENIS)[number]>('izin');
-  const [mulai, setMulai] = useState('');
-  const [selesai, setSelesai] = useState('');
+  const [mulai, setMulai] = useState(() => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10));
+  const [selesai, setSelesai] = useState(() => new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10));
   const [ket, setKet] = useState('');
   const [riwayat, setRiwayat] = useState<{ id: string; jenis: string; status: string; tgl_mulai: string; tgl_selesai: string }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -31,7 +32,11 @@ export default function IzinScreen() {
 
   async function submit() {
     setMsg(null);
-    if (!mulai || !selesai || !ket.trim()) { setMsg('Tanggal mulai, selesai, dan keterangan wajib diisi'); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(mulai) || !/^\d{4}-\d{2}-\d{2}$/.test(selesai)) {
+      setMsg('Format tanggal harus YYYY-MM-DD (cth. 2026-11-05)');
+      return;
+    }
+    if (!ket.trim()) { setMsg('Keterangan wajib diisi'); return; }
     if (selesai < mulai) { setMsg('Tanggal selesai tidak boleh sebelum mulai'); return; }
     setLoading(true);
     try {
@@ -53,7 +58,8 @@ export default function IzinScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
       <ScreenHeader title="Leave" subtitle="Izin • Sakit • Dinas" />
       <Card overlap>
         <SectionTitle>Pengajuan Baru</SectionTitle>
@@ -86,5 +92,6 @@ export default function IzinScreen() {
         </View>
       </View>
     </ScrollView>
+    </TabFade>
   );
 }

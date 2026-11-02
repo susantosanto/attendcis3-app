@@ -3,6 +3,7 @@ import { ScrollView, Text, TextInput, View } from 'react-native';
 import { theme } from '../_layout';
 import { supabase } from '../../lib/supabase';
 import { Btn, Card, ScreenHeader, SectionTitle } from '../../components/ui';
+import { TabFade } from '../../components/TabFade';
 import { formatIndoDate, todayJakarta } from '../../lib/haversine';
 
 /** Manajemen kalender & jadwal kerja (SIKADIR §10): daftar libur + tambah/hapus (admin), jam kerja per hari. */
@@ -43,7 +44,8 @@ export default function KalenderScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+    <TabFade>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.colors.background }} contentContainerStyle={{ paddingBottom: 120 }}>
       <ScreenHeader title="Kalender Kerja" subtitle="Hari kerja & hari libur sekolah" />
       <Card overlap>
         <SectionTitle>Jam Kerja per Hari</SectionTitle>
@@ -82,5 +84,6 @@ export default function KalenderScreen() {
       ) : null}
       <View style={{ height: 24 }} />
     </ScrollView>
+    </TabFade>
   );
 }

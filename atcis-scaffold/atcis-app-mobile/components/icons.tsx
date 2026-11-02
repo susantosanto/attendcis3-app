@@ -1,50 +1,74 @@
 import { View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import { Feather } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 
 /**
- * Set ikon AttendCis 3 — hyper-minimal line (tren 2026 utk aplikasi produktivitas):
- * 1 bobot garis (1.8px @ 24px), round caps, tanpa fill, 1 warna via prop.
- * Nol emoji di chrome UI.
+ * Set ikon AttendCis 3 — Feather (garis 2px konsisten, rounded, profesional).
+ * "AI slop" kemarin karena path SVG digambar manual; sekarang pakai set ikon
+ * yang didesain desainer ikon profesional, 1 gaya di seluruh app.
  */
 export type IconName =
   | 'home' | 'menu' | 'leave' | 'approval' | 'dashboard'
   | 'calendar' | 'help' | 'info' | 'user' | 'checkin' | 'checkout'
   | 'clock' | 'refresh' | 'logout';
 
-const PATHS: Record<IconName, React.ReactNode> = {
-  home: <Path d="M4 11.5 12 4l8 7.5M6.5 10.5V20h11v-9.5" />,
-  menu: <Path d="M4 7h16M4 12h16M4 17h16" />,
-  leave: <Path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6" />,
-  approval: <Path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 12.5l2.5 2.5 4.5-5" />,
-  dashboard: <Path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />,
-  calendar: <Path d="M5 6h14v15H5zM5 10h14M9 3v4M15 3v4" />,
-  help: <Path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.8.3-.9 1-.9 1.7M12 17.5v.01M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18" />,
-  info: <Path d="M12 11v6M12 7.5V8M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18" />,
-  user: <Path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM5 21c1-4 4-5.5 7-5.5s6 1.5 7 5.5" />,
-  checkin: <Path d="M14 4h-8v16h8M10 12h11M18 8.5 21.5 12 18 15.5" />,
-  checkout: <Path d="M10 4H2v16h8M14 12h-9M17 8.5 13.5 12l3.5 3.5" />,
-  clock: <Path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3.5 2" />,
-  refresh: <Path d="M20 12a8 8 0 1 1-2.3-5.6M20 3v4h-4" />,
-  logout: <Path d="M14 4H6v16h8M10 12h11M18 8.5 21.5 12 18 15.5" />,
+const MAP: Record<IconName, keyof typeof Feather.glyphMap> = {
+  home: 'home',
+  menu: 'grid',
+  leave: 'file-text',
+  approval: 'check-circle',
+  dashboard: 'bar-chart-2',
+  calendar: 'calendar',
+  help: 'help-circle',
+  info: 'info',
+  user: 'user',
+  checkin: 'log-in',
+  checkout: 'log-out',
+  clock: 'clock',
+  refresh: 'refresh-cw',
+  logout: 'log-out',
 };
 
-export function AppIcon({ name, size = 24, color = '#0F172A', strokeWidth = 1.8 }: {
-  name: IconName; size?: number; color?: string; strokeWidth?: number;
+export function AppIcon({ name, size = 24, color = '#0F172A' }: {
+  name: IconName; size?: number; color?: string;
 }) {
+  return <Feather name={MAP[name]} size={size} color={color} />;
+}
+
+/** LogoMark AttendCis 3 — huruf "A" + centang (pola logo presensi premium):
+ *  biru brand + emerald, di atas squircle putih. */
+export function LogoMark({ size = 76, radiusRatio = 0.28 }: { size?: number; radiusRatio?: number }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      <Circle cx="12" cy="12" r="0.1" strokeWidth={0} />
-      {PATHS[name]}
+    <View style={{
+      width: size, height: size, borderRadius: size * radiusRatio, backgroundColor: '#fff',
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: '#0B2A6B', shadowOpacity: 0.3, shadowRadius: 16,
+      shadowOffset: { width: 0, height: 8 }, elevation: 8,
+    }}>
+      <Svg width={size * 0.58} height={size * 0.58} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M5 20 L12 4 L19 20" stroke="#4A2040" strokeWidth={2.8} />
+        <Path d="M9 13.2l2.4 2.4L16.5 10" stroke="#10B981" strokeWidth={2.8} />
+      </Svg>
+    </View>
+  );
+}
+
+/** Topi toga — ikon khas pendidikan (tidak ada di set Feather). */
+export function GradCap({ size = 24, color = '#7C6CF0' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 4 2.5 9 12 14l9.5-5L12 4z" />
+      <Path d="M6.5 11.5V16c0 1.5 2.5 3 5.5 3s5.5-1.5 5.5-3v-4.5" />
+      <Path d="M18.5 9.5V15" />
     </Svg>
   );
 }
 
-/** Chip ikon: lingkaran tint lembut + garis berwarna — pengganti emoji di kartu menu. */
+/** Chip ikon: lingkaran tint lembut + ikon garis — pengganti emoji di kartu menu. */
 export function IconChip({ name, bg, fg, size = 46 }: { name: IconName; bg: string; fg: string; size?: number }) {
   return (
     <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
-      <AppIcon name={name} size={size * 0.5} color={fg} />
+      <AppIcon name={name} size={size * 0.48} color={fg} />
     </View>
   );
 }
